@@ -1,0 +1,16 @@
+{
+  "comment": "DShot frame test vektörleri — C (common/test) ve Python (dshot-cli/tests) ortak kaynak. Değiştirince: python3 tools/gen_vectors.py",
+  "vectors": [
+    {"value": 1046, "telemetry": false, "inverted": false, "frame": "0x82C6"},
+    {"value": 0,    "telemetry": false, "inverted": false, "frame": "0x0000"},
+    {"value": 2047, "telemetry": true,  "inverted": false, "frame": "0xFFFF"},
+    {"value": 48,   "telemetry": false, "inverted": false, "frame": "0x0606"},
+    {"value": 1,    "telemetry": true,  "inverted": false, "frame": "0x0033"},
+    {"value": 21,   "telemetry": true,  "inverted": false, "frame": "0x02B9"},
+    {"value": 1000, "telemetry": true,  "inverted": false, "frame": "0x7D1B"},
+    {"value": 1046, "telemetry": false, "inverted": true,  "frame": "0x82C9"},
+    {"value": 0,    "telemetry": false, "inverted": true,  "frame": "0x000F"},
+    {"value": 2047, "telemetry": true,  "inverted": true,  "frame": "0xFFF0"},
+    {"value": 48,   "telemetry": false, "inverted": true,  "frame": "0x0609"}
+  ]
+}

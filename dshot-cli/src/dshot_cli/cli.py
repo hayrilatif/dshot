@@ -17,7 +17,10 @@ CHIPS = {
     "0x000": "okunamadı (F103'te debugger yokken normal)",
 }
 
-TX_WORDS = {"SPEED", "RATE", "THR", "RAW", "TLM", "CMD", "STOP", "ENABLE", "TIMEOUT", "BIDIR", "TELEM"}
+TX_WORDS = {"SPEED", "RATE", "THR", "RAW", "TLM", "CMD", "STOP", "ENABLE", "TIMEOUT", "BIDIR", "TELEM",
+            "RPM", "POLES", "RPMMAX", "KP", "KI", "3D"}
+REVERSE_WORDS = {"geri", "ters", "rev", "reverse", "1"}
+FORWARD_WORDS = {"ileri", "fwd", "forward", "0"}
 RX_WORDS = {"STREAM", "POL", "RESET"}
 
 SHELL_HELP = """Komutlar (TX/RX öneki isteğe bağlı):
@@ -31,6 +34,11 @@ SHELL_HELP = """Komutlar (TX/RX öneki isteğe bağlı):
   enable 0|1             pals üretimi
   timeout <ms>           failsafe (0 = kapalı)
   bidir 0|1              bidirectional DShot (ESC aynı kablodan telemetri yollar)
+  rpm <n> [ileri|geri]   RPM hedefi (kapalı çevrim, bidir gerekir); rpm 0 = dur
+  poles <n>              motor kutup sayısı (RPM hesabı)
+  rpmmax <1..2000>       RPM modunda throttle tavanı (3D'de bir yönün 1..999'u)
+  kp <milli> / ki <milli>  kontrolcü kazançları (varsayılan 50 / 1000)
+  3d 0|1                 ESC 3D modda mı (değerlerin yönü)
   stream <ms> / pol auto|normal|inverted / reset   (okuyucu)
   status                 durum
   quit                   çık (çıkarken TX STOP gönderilir)"""
@@ -45,6 +53,13 @@ def shell_line_to_command(text: str):
     if head == "CMD" and len(parts) >= 2:
         num, rep = commands.resolve(parts[1])
         return f"TX CMD {num} {parts[2] if len(parts) > 2 else rep}"
+    if head == "RPM" and len(parts) >= 2:
+        if len(parts) > 2:
+            word = parts[2].lower()
+            if word not in REVERSE_WORDS | FORWARD_WORDS:
+                raise DShotError(f"yön 'ileri' ya da 'geri' olmalı: {parts[2]}")
+            return f"TX RPM {parts[1]} {int(word in REVERSE_WORDS)}"
+        return f"TX RPM {parts[1]}"
     if head in ("TX", "RX", "STATUS", "PING"):
         return " ".join(parts)
     if head in TX_WORDS:

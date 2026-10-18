@@ -29,6 +29,12 @@ static const cmd_spec_t SPECS[] = {
     {"TX", "TIMEOUT", PROTO_TX_TIMEOUT, 1, 1, ARG_NUM, {0, 0}, {60000, 0}},
     {"TX", "BIDIR", PROTO_TX_BIDIR, 1, 1, ARG_NUM, {0, 0}, {1, 0}},
     {"TX", "TELEM", PROTO_TX_TELEM, 1, 1, ARG_NUM, {0, 0}, {10000, 0}},
+    {"TX", "RPM", PROTO_TX_RPM, 1, 2, ARG_NUM, {0, 0}, {200000, 1}},
+    {"TX", "POLES", PROTO_TX_POLES, 1, 1, ARG_NUM, {2, 0}, {64, 0}},
+    {"TX", "RPMMAX", PROTO_TX_RPMMAX, 1, 1, ARG_NUM, {1, 0}, {2000, 0}},
+    {"TX", "KP", PROTO_TX_KP, 1, 1, ARG_NUM, {0, 0}, {1000000, 0}},
+    {"TX", "KI", PROTO_TX_KI, 1, 1, ARG_NUM, {0, 0}, {1000000, 0}},
+    {"TX", "3D", PROTO_TX_3D, 1, 1, ARG_NUM, {0, 0}, {1, 0}},
     {"RX", "STREAM", PROTO_RX_STREAM, 1, 1, ARG_NUM, {0, 0}, {10000, 0}},
     {"RX", "RAW", PROTO_RX_RAW, 1, 1, ARG_NUM, {0, 0}, {100000, 0}},
     {"RX", "POL", PROTO_RX_POL, 1, 1, ARG_POL, {0, 0}, {0, 0}},
@@ -163,7 +169,7 @@ proto_msg_t proto_parse(char *line)
 
 bool proto_is_tx(proto_cmd_t c)
 {
-    return c >= PROTO_TX_SPEED && c <= PROTO_TX_TELEM;
+    return c >= PROTO_TX_SPEED && c <= PROTO_TX_3D;
 }
 
 bool proto_is_rx(proto_cmd_t c)

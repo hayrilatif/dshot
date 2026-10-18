@@ -62,7 +62,8 @@ static void test_status_txrx(void)
 {
     cmd("STATUS", 0);
     TEST_ASSERT_EQUAL_STRING("OK board=blackpill caps=tx,rx dev=0x431 fw=1.0.0 tx_speed=600 tx_rate=1000 tx_val=0 "
-                             "tx_tlm=0 tx_en=1 tx_timeout=500 tx_bidir=0 tx_telem=0 rx_pol=auto rx_inv=0 rx_stream=0\n",
+                             "tx_tlm=0 tx_en=1 tx_timeout=500 tx_bidir=0 tx_telem=0 tx_3d=0 tx_poles=14 tx_rpm=0 tx_rpm_rev=0 "
+                             "tx_rpm_on=0 tx_rpmmax=300 tx_kp=50 tx_ki=1000 rx_pol=auto rx_inv=0 rx_stream=0\n",
                              out);
 }
 
@@ -265,6 +266,100 @@ static void test_bidir_telemetry_stream(void)
     TEST_ASSERT_EQUAL_STRING("ERR busy\n", out);
 }
 
+static void feed_erpm(uint32_t erpm, int frames)
+{
+    /* period_us = 60e6/erpm, normalize: mantis 9 bit, MSB set */
+    uint32_t period = 60000000u / erpm, e = 0;
+    while (period > 511u) {
+        period >>= 1;
+        e++;
+    }
+    while (e > 0u && period < 256u) { /* normalize edilmiş biçim */
+        period <<= 1;
+        e--;
+    }
+    uint16_t v12 = (uint16_t)((e << 9) | period);
+    for (int i = 0; i < frames; i++) {
+        dshot_reply_t r = make_reply(v12, 112);
+        app_tx_reply(&app, &r, 84000000u);
+    }
+}
+
+static void test_rpm_mode_requires_bidir_and_runs(void)
+{
+    cmd("TX RPM 3000", 0);
+    TEST_ASSERT_EQUAL_STRING("ERR bidir\n", out);
+    cmd("TX RPM 3000 1", 0);
+    TEST_ASSERT_EQUAL_STRING("ERR bidir\n", out);
+    cmd("TX BIDIR 1", 0);
+    cmd("TX RPM 3000 1", 0);
+    TEST_ASSERT_EQUAL_STRING("ERR 3d\n", out);
+    cmd("TX RPM 3000", 0);
+    TEST_ASSERT_EQUAL_STRING("OK\n", out);
+    feed_erpm(7000, 50); /* 1000 RPM < hedef → throttle artmalı */
+    TEST_ASSERT_TRUE(app.tx.value >= 48u);
+    uint16_t v = app.tx.value;
+    feed_erpm(7000, 50);
+    TEST_ASSERT_TRUE(app.tx.value > v);
+    cmd("TX THR 0", 1);
+    TEST_ASSERT_FALSE(app.rpm.active);
+    TEST_ASSERT_EQUAL_UINT16(0, app.tx.value);
+}
+
+static void test_rpm_mode_3d_reverse_range(void)
+{
+    cmd("TX BIDIR 1", 0);
+    cmd("TX 3D 1", 0);
+    cmd("TX RPM 2000 1", 0);
+    TEST_ASSERT_EQUAL_STRING("OK\n", out);
+    feed_erpm(7000, 100);
+    TEST_ASSERT_TRUE(app.tx.value >= 48u && app.tx.value <= 1047u);
+    cmd("TX RPM 2000", 0);
+    feed_erpm(7000, 100);
+    TEST_ASSERT_TRUE(app.tx.value >= 1049u);
+}
+
+static void test_rpm_lost_telemetry_stops(void)
+{
+    cmd("TX BIDIR 1", 0);
+    cmd("TX RPM 3000", 0);
+    feed_erpm(7000, 50);
+    dshot_reply_t none;
+    memset(&none, 0, sizeof none);
+    for (int i = 0; i < 100; i++) {
+        app_tx_reply(&app, &none, 84000000u);
+    }
+    TEST_ASSERT_EQUAL_UINT16(0, app.tx.value);
+    TEST_ASSERT_FALSE(app.rpm.active);
+    poll(10, true);
+    TEST_ASSERT_EQUAL_STRING("#TX RPM LOST\n", out);
+}
+
+static void test_rpm_failsafe_stops_controller(void)
+{
+    cmd("TX BIDIR 1", 0);
+    cmd("TX RPM 3000", 0);
+    feed_erpm(7000, 50);
+    poll(600, true);
+    TEST_ASSERT_EQUAL_STRING_LEN("#TX FAILSAFE\n", out, 13);
+    TEST_ASSERT_FALSE(app.rpm.active);
+    feed_erpm(7000, 50);
+    TEST_ASSERT_EQUAL_UINT16(0, app.tx.value);
+}
+
+static void test_rpm_settings(void)
+{
+    cmd("TX POLES 12", 0);
+    TEST_ASSERT_EQUAL_UINT16(12, app.rpm.poles);
+    cmd("TX POLES 13", 0);
+    TEST_ASSERT_EQUAL_STRING("ERR range\n", out);
+    cmd("TX RPMMAX 500", 0);
+    TEST_ASSERT_EQUAL_UINT16(500, app.rpm.max_mag);
+    cmd("TX THR 10", 0);
+    cmd("TX 3D 1", 0);
+    TEST_ASSERT_EQUAL_STRING("ERR busy\n", out);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -287,5 +382,10 @@ int main(void)
     RUN_TEST(test_rx_raw_reports_bad_bursts);
     RUN_TEST(test_rx_raw_every_2);
     RUN_TEST(test_bidir_telemetry_stream);
+    RUN_TEST(test_rpm_mode_requires_bidir_and_runs);
+    RUN_TEST(test_rpm_mode_3d_reverse_range);
+    RUN_TEST(test_rpm_lost_telemetry_stops);
+    RUN_TEST(test_rpm_failsafe_stops_controller);
+    RUN_TEST(test_rpm_settings);
     return UNITY_END();
 }

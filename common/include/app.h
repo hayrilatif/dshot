@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "dshot_rx_decode.h"
+#include "dshot_rpmctl.h"
 #include "dshot_rx_stats.h"
 #include "dshot_telem.h"
 #include "dshot_txctl.h"
@@ -38,6 +39,8 @@ typedef struct {
     dshot_telem_t telem;
     uint32_t telem_ms;
     uint32_t last_telem_ms;
+    dshot_rpmctl_t rpm;
+    bool rpm_lost_pending;
 } app_t;
 
 void app_init(app_t *a, const app_hw_t *hw, uint32_t dev_id, uint32_t now_ms);

@@ -16,9 +16,9 @@ TELEM_MS = 250
 DEFAULT_POLES = 14
 
 HELP = [
-    "↑/↓ throttle ±10   ←/→ ±1   PgUp/PgDn ±100   Boşluk/0: DUR",
+    "↑/↓ throttle ±10   ←/→ ±1   PgUp/PgDn ±100   Boşluk/0: DUR   (RPM modunda: hedef ±100/±10/±1000)",
     "s: hız değiştir   d: bidirectional (telemetri) aç/kapa   t: telemetri biti   e: çıkış   b: bip",
-    ":  komut yaz (ör. cmd spin_reversed, cmd edt_on, rate 2000, raw 1046 1, poles 14)",
+    "r: RPM hedefi yaz   :  komut yaz (ör. rpm 3000 geri, 3d 1, poles 14, rpmmax 400, cmd edt_on)",
     "q: çık (çıkarken motor durdurulur)",
 ]
 
@@ -34,7 +34,6 @@ class Dashboard:
         self.input = None  # komut satırı modunda yazılan metin
         self.telem = {}
         self.telem_time = None
-        self.poles = DEFAULT_POLES
         self._ticks = 0
         self.refresh_status()
         if self.tx:
@@ -90,18 +89,29 @@ class Dashboard:
             if not on:
                 self.message += "  (ESC bidirectional'ı görmezse gücünü kesip tekrar ver)"
 
+    @property
+    def poles(self) -> int:
+        return int(self.status.get("tx_poles", DEFAULT_POLES))
+
+    @property
+    def rpm_on(self) -> bool:
+        return self.status.get("tx_rpm_on") == "1"
+
+    @property
+    def mode3d(self) -> bool:
+        return self.status.get("tx_3d") == "1"
+
+    def set_rpm_target(self, rpm):
+        rpm = max(0, rpm)
+        rev = self.status.get("tx_rpm_rev") == "1"
+        cmd = f"TX RPM {rpm} 1" if rev and rpm else f"TX RPM {rpm}"
+        if self._tx(cmd):
+            self.status["tx_rpm"] = str(rpm)
+            self.status["tx_rpm_on"] = "1" if rpm else "0"
+            if not rpm:
+                self.throttle = 0
+
     def run_command(self, text):
-        parts = text.split()
-        if parts and parts[0].lower() == "poles":
-            try:
-                poles = int(parts[1])
-                if poles < 2 or poles % 2:
-                    raise ValueError
-                self.poles = poles
-                self.message = f"Motor kutup sayısı: {poles}"
-            except (IndexError, ValueError):
-                self.message = "HATA: kullanım 'poles 14' (çift sayı)"
-            return
         try:
             cmd = shell_line_to_command(text)
         except DShotError as e:
@@ -135,8 +145,13 @@ class Dashboard:
         elif line.startswith("#T "):
             self.telem = parse_kv(line[3:])
             self.telem_time = self.clock()
+        elif line.startswith("#TX RPM LOST"):
+            self.throttle = 0
+            self.status["tx_rpm_on"] = "0"
+            self.message = "RPM modu durdu: ESC'den telemetri gelmedi (motor durduruldu)"
         elif line.startswith("#TX FAILSAFE"):
             self.throttle = 0
+            self.status["tx_rpm_on"] = "0"
             self.message = "FAILSAFE: bağlantı kesildi sanıldı, motor durduruldu"
 
     def close(self):
@@ -164,10 +179,16 @@ class Dashboard:
             return True
         steps = {curses.KEY_UP: 10, curses.KEY_DOWN: -10, curses.KEY_RIGHT: 1, curses.KEY_LEFT: -1,
                  curses.KEY_PPAGE: 100, curses.KEY_NPAGE: -100}
-        if key in steps and self.tx:
+        if key in steps and self.tx and self.rpm_on:
+            target = int(self.status.get("tx_rpm", 0)) + steps[key] * 10
+            self.set_rpm_target(max(10, target) if target > 0 else 10)
+        elif key in steps and self.tx:
             self.set_throttle(self.throttle + steps[key])
+        elif key == ord("r") and self.tx:
+            self.input = "rpm "
         elif key in (ord(" "), ord("0")) and self.tx:
             self.stop()
+            self.status["tx_rpm_on"] = "0"
         elif key == ord("s") and self.tx:
             self.cycle_speed()
         elif key == ord("d") and self.tx:
@@ -201,12 +222,14 @@ class Dashboard:
                 f"Bidirectional: {'AÇIK' if st.get('tx_bidir') == '1' else 'kapalı'}    "
                 f"Çıkış: {'AÇIK' if st.get('tx_en', '1') == '1' else 'KAPALI'}    "
                 f"Failsafe: {'kapalı' if timeout == '0' else timeout + ' ms'}",
-                f"  Gönderilen: {val:4}  → {value_meaning(val)}",
+                f"  Gönderilen: {val:4}  → {value_meaning(val, self.mode3d)}" + ("   [ESC 3D modda]" if self.mode3d else ""),
                 f"  Telemetri biti: {st.get('tx_tlm', '0')}",
                 "",
             ]
         if self.tx and st.get("tx_bidir") == "1":
             out += self.telemetry_lines() + [""]
+        if self.tx and self.rpm_on:
+            out += self.rpm_lines() + [""]
         if self.rx:
             out.append("── OKUMA (PB6) " + "─" * 43)
             s = self.rx_stats
@@ -225,7 +248,7 @@ class Dashboard:
                 out += [
                     f"  Durum: sinyal var ✓   Algılanan hız: {'DShot' + speed if speed != '?' else 'standart dışı'}"
                     f"   Polarite: {'ters (bidirectional)' if inv else 'normal'}",
-                    f"  Okunan: {int(s['val']):4}  → {value_meaning(int(s['val']))}",
+                    f"  Okunan: {int(s['val']):4}  → {value_meaning(int(s['val']), self.mode3d)}",
                     f"  Aralık: {vmin}–{vmax}" + ("  (sabit)" if vmin == vmax else "  (değişiyor)")
                     + f"    Telemetri biti: {s.get('tlm', '-')}",
                     f"  Frame/sn: {s.get('rate', '?')}    CRC hatası: {s.get('crc_err', '0')}    "
@@ -263,6 +286,7 @@ class Dashboard:
         if erpm != "-":
             rpm = int(erpm) // (self.poles // 2)
             out.append(f"  Devir: {rpm} RPM   (eRPM {erpm}, {self.poles} kutup — değiştirmek için ':poles N')")
+            self.measured_rpm = rpm
         edt = []
         if t.get("temp_c", "-") != "-":
             edt.append(f"Sıcaklık: {t['temp_c']} °C")
@@ -273,6 +297,25 @@ class Dashboard:
         if t.get("stress", "-") != "-":
             edt.append(f"Stres: {t['stress']}")
         out.append("  " + "   ".join(edt) if edt else "  Sıcaklık/voltaj/akım yok (EDT kapalı olabilir: ':cmd edt_on')")
+        return out
+
+
+    def rpm_lines(self) -> list:
+        st = self.status
+        target = int(st.get("tx_rpm", 0))
+        direction = (" GERİ" if st.get("tx_rpm_rev") == "1" else " İLERİ") if self.mode3d else ""
+        val = int(st.get("tx_val", 0))
+        cap = int(st.get("tx_rpmmax", 0))
+        cap_full = 999 if self.mode3d else 2000
+        out = ["── RPM KONTROL (kapalı çevrim) " + "─" * 27,
+               f"  Hedef: {target} RPM{direction}    Çıkış: {val} → {value_meaning(val, self.mode3d)}"
+               f"    Tavan: %{min(cap, cap_full) * 100 // cap_full}"]
+        measured = getattr(self, "measured_rpm", None)
+        if measured is not None:
+            out.append(f"  Ölçülen: {measured} RPM    Fark: {measured - target:+d} RPM")
+            mag = val - 1048 if (self.mode3d and val >= 1049) else val - 47
+            if mag >= min(cap, cap_full) and measured < target * 0.95:
+                out.append("  ⚠ Tavana dayandı: hedefe ulaşmak için ':rpmmax' yükselt (dikkatli!)")
         return out
 
 

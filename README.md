@@ -51,6 +51,7 @@ En kolayı — **kontrol paneli** (gönderim + canlı okuma tek ekranda):
 | Boşluk veya 0 | DUR |
 | s | hız değiştir 150→300→600→1200 (motor önce durdurulur) |
 | d | bidirectional DShot (telemetri) aç/kapa (motor önce durdurulur) |
+| r | RPM hedefi yaz (kapalı çevrim; RPM modunda oklar hedefi değiştirir) |
 | t / e / b | telemetri biti / çıkış aç-kapa / bip |
 | : | komut yaz (`cmd spin_reversed`, `rate 2000`, `raw 1046 1`, `timeout 0`...) |
 | q | çık (motor durdurulur) |
@@ -83,6 +84,16 @@ EDT ile sıcaklık / voltaj / akım gösterir (`:cmd edt_on` ile açılır).
 - ESC firmware'i desteklemeli: Bluejay, AM32, BLHeli_32 (düz BLHeli_S desteklemez).
 - ESC modu açılışta algılar: bidirectional açtıktan sonra ESC'nin gücünü kesip tekrar ver.
 - Motor dururken de cevap gelir (devir 0) — test için motoru döndürmek gerekmez.
+
+### RPM hedefi (kapalı çevrim)
+
+Bidirectional açıkken `r` → `3000` (3D modda `rpm 3000 geri` / `ileri`). Firmware her frame'de ölçülen
+eRPM'den mekanik RPM'i hesaplar (`:poles N`) ve PI kontrolcüyle throttle'ı ayarlar.
+
+- `:3d 1` — ESC 3D moddaysa mutlaka söyle; aksi halde yön aralıkları yanlış olur.
+- `:rpmmax N` — kontrolcünün verebileceği en yüksek throttle (varsayılan 300 = normal modda %15, 3D'de %30).
+- `:kp N` / `:ki N` — kazançlar (milli birim, varsayılan 50 / 1000). Salınım varsa ikisini de düşür.
+- 100 ms geçerli telemetri gelmezse motor durur (`#TX RPM LOST`); elle throttle / Boşluk / failsafe RPM modunu kapatır.
 
 ### Güvenlik (failsafe)
 

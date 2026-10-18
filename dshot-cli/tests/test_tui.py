@@ -139,6 +139,61 @@ def test_bidir_no_reply_hint_and_poles():
     text = "\n".join(d.lines())
     assert "ESC cevap vermiyor" in text and "gücünü kesip" in text
     d.run_command("poles 12")
-    assert d.poles == 12
-    d.run_command("poles 7")
-    assert d.poles == 12 and "HATA" in d.message
+    assert "TX poles 12" in fw.log  # kutup sayısı firmware'de tutulur
+
+
+class RpmFirmware(BidirFirmware):
+    def __init__(self, telem):
+        super().__init__(telem)
+        self.rpm, self.rev, self.mode3d = 0, 0, 0
+
+    def __call__(self, line):
+        u = line.upper().split()
+        if u[:2] == ["TX", "RPM"]:
+            self.log.append(line)
+            if not self.bidir:
+                return "ERR bidir\n"
+            self.rpm, self.rev = int(u[2]), int(u[3]) if len(u) > 3 else 0
+            self.val = 0 if not self.rpm else (1100 if self.mode3d and not self.rev else 200)
+            return "OK\n"
+        if u[:2] == ["TX", "3D"]:
+            self.log.append(line)
+            self.mode3d = int(u[2])
+            return "OK\n"
+        if u == ["STATUS"]:
+            return super().__call__(line).replace(
+                "tx_bidir=", f"tx_3d={self.mode3d} tx_poles=14 tx_rpm={self.rpm} tx_rpm_rev={self.rev} "
+                f"tx_rpm_on={int(self.rpm > 0)} tx_rpmmax=300 tx_bidir=")
+        return super().__call__(line)
+
+
+def test_rpm_mode_from_panel():
+    fw = RpmFirmware("ok=250 bad=0 miss=0 erpm=21000 temp_c=- volt_mv=- curr_a=- stress=- status=-")
+    link = Link("FAKE", timeout=0.2, serial_obj=FakeSerial(fw))
+    d = Dashboard(link, link, clock=lambda: 100.0)
+    d.handle_key(ord("d"))
+    d.handle_key(ord("r"))
+    assert d.input == "rpm "
+    for ch in "3000":
+        d.handle_key(ord(ch))
+    d.handle_key(10)
+    assert fw.rpm == 3000
+    d.refresh_status()
+    d.handle_key(curses.KEY_UP)
+    assert fw.rpm == 3100
+    d.tick()
+    text = "\n".join(d.lines())
+    assert "RPM KONTROL" in text and "Hedef: 3100 RPM" in text and "Ölçülen: 3000 RPM" in text
+    d.handle_key(ord(" "))
+    assert not d.rpm_on
+
+
+def test_3d_meaning_and_rpm_direction_words():
+    from dshot_cli.cli import shell_line_to_command
+
+    assert describe.value_meaning(1049, mode3d=True).startswith("3D İLERİ")
+    assert describe.value_meaning(1047, mode3d=True) == "3D GERİ %100.0"
+    assert shell_line_to_command("rpm 3000 geri") == "TX RPM 3000 1"
+    assert shell_line_to_command("rpm 3000 ileri") == "TX RPM 3000 0"
+    assert shell_line_to_command("rpm 0") == "TX RPM 0"
+    assert shell_line_to_command("3d 1") == "TX 3d 1"

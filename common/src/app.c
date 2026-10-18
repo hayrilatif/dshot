@@ -32,6 +32,7 @@ void app_init(app_t *a, const app_hw_t *hw, uint32_t dev_id, uint32_t now_ms)
     a->last_stream_ms = now_ms;
     dshot_telem_init(&a->telem);
     a->last_telem_ms = now_ms;
+    dshot_rpmctl_init(&a->rpm);
 }
 
 bool app_busy(const app_t *a)
@@ -62,10 +63,13 @@ static size_t format_status(const app_t *a, char *out, size_t cap)
     size_t n = put(out, cap, "OK board=%s caps=%s dev=0x%03lx fw=%s", a->hw->board, caps, (unsigned long)a->dev_id,
                    APP_FW_VERSION);
     if (a->hw->has_tx) {
-        n += put(out + n, cap - n, " tx_speed=%u tx_rate=%lu tx_val=%u tx_tlm=%u tx_en=%u tx_timeout=%lu tx_bidir=%u tx_telem=%lu",
+        n += put(out + n, cap - n, " tx_speed=%u tx_rate=%lu tx_val=%u tx_tlm=%u tx_en=%u tx_timeout=%lu tx_bidir=%u tx_telem=%lu"
+                 " tx_3d=%u tx_poles=%u tx_rpm=%lu tx_rpm_rev=%u tx_rpm_on=%u tx_rpmmax=%u tx_kp=%lu tx_ki=%lu",
                  (unsigned)a->tx.speed, (unsigned long)a->tx.rate_hz, (unsigned)a->tx.value, (unsigned)a->tx.tlm,
                  (unsigned)a->tx.enabled, (unsigned long)a->tx.timeout_ms, (unsigned)a->tx.bidir,
-                 (unsigned long)a->telem_ms);
+                 (unsigned long)a->telem_ms, (unsigned)a->rpm.mode3d, (unsigned)a->rpm.poles,
+                 (unsigned long)a->rpm.target_rpm, (unsigned)a->rpm.reverse, (unsigned)a->rpm.active,
+                 (unsigned)a->rpm.max_mag, (unsigned long)a->rpm.kp_milli, (unsigned long)a->rpm.ki_milli);
     }
     if (a->hw->has_rx) {
         n += put(out + n, cap - n, " rx_pol=%s rx_inv=%u rx_stream=%lu", pol_name(a->rx_pol_mode),
@@ -104,6 +108,15 @@ size_t app_handle_line(app_t *a, char *line, uint32_t now_ms, char *out, size_t 
     }
     if (a->hw->has_tx && (proto_is_tx(m.cmd) || m.cmd == PROTO_PING)) {
         dshot_txctl_touch(&a->tx, now_ms);
+    }
+
+    /* Elle çıkış komutları kapalı çevrimi bırakır */
+    if (m.cmd == PROTO_TX_THR || m.cmd == PROTO_TX_RAW || m.cmd == PROTO_TX_STOP || m.cmd == PROTO_TX_CMD ||
+        m.cmd == PROTO_TX_ENABLE || m.cmd == PROTO_TX_SPEED || m.cmd == PROTO_TX_BIDIR || m.cmd == PROTO_TX_3D) {
+        if (a->rpm.active && m.cmd != PROTO_TX_THR && m.cmd != PROTO_TX_RAW && m.cmd != PROTO_TX_STOP) {
+            dshot_txctl_stop(&a->tx);
+        }
+        dshot_rpmctl_stop(&a->rpm);
     }
 
     const char *err = NULL;
@@ -161,6 +174,47 @@ size_t app_handle_line(app_t *a, char *line, uint32_t now_ms, char *out, size_t 
         a->telem_ms = m.args[0];
         a->last_telem_ms = now_ms;
         dshot_telem_reset_window(&a->telem);
+        break;
+    case PROTO_TX_RPM:
+        if (m.args[0] == 0u) {
+            dshot_rpmctl_stop(&a->rpm);
+            dshot_txctl_stop(&a->tx);
+        } else if (!a->tx.bidir) {
+            err = "bidir";
+        } else if (m.nargs > 1u && m.args[1] != 0u && !a->rpm.mode3d) {
+            err = "3d";
+        } else if (dshot_txctl_cmd_active(&a->tx)) {
+            err = "busy";
+        } else {
+            if (!a->rpm.active) {
+                dshot_txctl_stop(&a->tx);
+            }
+            dshot_rpmctl_set_target(&a->rpm, m.args[0], m.nargs > 1u && m.args[1] != 0u);
+            a->rpm_lost_pending = false;
+        }
+        break;
+    case PROTO_TX_POLES:
+        if (m.args[0] % 2u) {
+            err = "range";
+        } else {
+            a->rpm.poles = (uint16_t)m.args[0];
+        }
+        break;
+    case PROTO_TX_RPMMAX:
+        a->rpm.max_mag = (uint16_t)m.args[0];
+        break;
+    case PROTO_TX_KP:
+        a->rpm.kp_milli = m.args[0];
+        break;
+    case PROTO_TX_KI:
+        a->rpm.ki_milli = m.args[0];
+        break;
+    case PROTO_TX_3D:
+        if (a->tx.value != 0u) {
+            err = "busy";
+        } else {
+            a->rpm.mode3d = m.args[0] != 0u;
+        }
         break;
     case PROTO_RX_STREAM:
         a->stream_ms = m.args[0];
@@ -220,6 +274,22 @@ void app_tx_reply(app_t *a, const dshot_reply_t *r, uint32_t tick_hz)
     uint16_t v12 = 0;
     dshot_reply_status_t st = dshot_reply_decode(r, tick_hz, a->tx.speed, &v12);
     dshot_telem_add(&a->telem, st, v12);
+    if (!a->rpm.active) {
+        return;
+    }
+    int32_t erpm = -1;
+    if (st == DSHOT_REPLY_OK && !dshot_v12_is_edt(v12)) {
+        erpm = (int32_t)dshot_v12_erpm(v12);
+    }
+    bool lost = false;
+    uint16_t value = dshot_rpmctl_step(&a->rpm, erpm, 1.0f / (float)a->tx.rate_hz, &lost);
+    if (lost) {
+        dshot_txctl_stop(&a->tx);
+        a->rpm_lost_pending = true;
+        return;
+    }
+    a->tx.tlm = false;
+    a->tx.value = value;
 }
 
 size_t app_poll(app_t *a, uint32_t now_ms, bool dtr, char *out, size_t cap)
@@ -235,7 +305,12 @@ size_t app_poll(app_t *a, uint32_t now_ms, bool dtr, char *out, size_t cap)
             failsafe = true;
         }
         if (failsafe) {
+            dshot_rpmctl_stop(&a->rpm);
             n += put(out + n, cap - n, "#TX FAILSAFE\n");
+        }
+        if (a->rpm_lost_pending) {
+            a->rpm_lost_pending = false;
+            n += put(out + n, cap - n, "#TX RPM LOST\n");
         }
         if (a->cmd_reply_pending && !dshot_txctl_cmd_active(&a->tx)) {
             a->cmd_reply_pending = false;

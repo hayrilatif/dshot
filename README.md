@@ -39,6 +39,25 @@ cd blackpill && pio run -e txrx -t upload   # veya -e tx
 
 ## Kullanım
 
+En kolayı — **kontrol paneli** (gönderim + canlı okuma tek ekranda):
+
+```bash
+.venv/bin/dshot
+```
+
+| Tuş | İş |
+|---|---|
+| ↑ / ↓ | throttle ±10 (←/→ ±1, PgUp/PgDn ±100) |
+| Boşluk veya 0 | DUR |
+| s | hız değiştir 150→300→600→1200 (motor önce durdurulur) |
+| t / e / b | telemetri biti / çıkış aç-kapa / bip |
+| : | komut yaz (`cmd spin_reversed`, `rate 2000`, `raw 1046 1`, `timeout 0`...) |
+| q | çık (motor durdurulur) |
+
+Aynı anda **tek bir** `dshot` penceresi açık olmalı; ikincisi "port kullanılıyor" der.
+
+Tek seferlik komutlar:
+
 ```bash
 dshot ports                     # bağlı kartlar
 dshot status                    # durum + çip tipi

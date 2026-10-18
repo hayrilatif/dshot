@@ -247,12 +247,20 @@ def cmd_loopback(args) -> int:
     return 0 if all(r.ok for r in results) else 1
 
 
+def cmd_ui(args) -> int:
+    from . import tui
+
+    return tui.run(args.port)
+
+
 def build_parser() -> argparse.ArgumentParser:
     port = argparse.ArgumentParser(add_help=False)
     port.add_argument("--port", help="seri port (varsayılan: otomatik bul)")
 
-    p = argparse.ArgumentParser(prog="dshot", description="DShot gönderici/okuyucu kontrol aracı")
-    sub = p.add_subparsers(dest="group", required=True)
+    p = argparse.ArgumentParser(prog="dshot", description="DShot gönderici/okuyucu kontrol aracı. "
+                                "Argümansız çalıştırınca kontrol paneli açılır.")
+    sub = p.add_subparsers(dest="group")
+    sub.add_parser("ui", parents=[port], help="tek ekranlı kontrol paneli (varsayılan)").set_defaults(func=cmd_ui)
 
     sub.add_parser("ports", help="bağlı kartları listele").set_defaults(func=cmd_ports)
     sub.add_parser("status", parents=[port], help="kart durumu").set_defaults(func=cmd_status)
@@ -305,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.group is None:
+        args.func, args.port = cmd_ui, None
     try:
         return args.func(args)
     except DShotError as e:

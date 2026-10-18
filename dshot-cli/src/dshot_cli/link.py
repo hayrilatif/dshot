@@ -25,8 +25,13 @@ class Link:
         self.port = port
         self.timeout = timeout
         try:
-            self._ser = serial_obj if serial_obj is not None else serial.Serial(port, 115200, timeout=0.02)
+            # exclusive: iki program aynı portu okursa satırları paylaşıp ikisi de bozulur
+            self._ser = (serial_obj if serial_obj is not None
+                         else serial.Serial(port, 115200, timeout=0.02, exclusive=True))
         except serial.SerialException as e:
+            if "lock" in str(e).lower():
+                raise DShotError(f"{port} başka bir program tarafından kullanılıyor "
+                                 "(açık bir 'dshot' penceresi var mı? önce onu kapat)") from e
             raise DShotError(f"{port} açılamadı: {e}") from e
         self._buf = bytearray()
         self._async = collections.deque(maxlen=10000)

@@ -22,6 +22,7 @@ typedef struct {
     volatile uint16_t cmd_value;
     volatile uint16_t cmd_remaining;
     bool cmd_aborted;
+    volatile bool bidir; /* ters sinyal + ters CRC, ESC aynı kablodan cevap verir */
 } dshot_txctl_t;
 
 void dshot_txctl_init(dshot_txctl_t *t, uint32_t now_ms);
@@ -33,6 +34,8 @@ const char *dshot_txctl_set_rate(dshot_txctl_t *t, uint32_t rate_hz);
 const char *dshot_txctl_set_value(dshot_txctl_t *t, uint16_t value, bool tlm);
 const char *dshot_txctl_start_cmd(dshot_txctl_t *t, uint16_t cmd, uint16_t repeat);
 void dshot_txctl_set_tlm(dshot_txctl_t *t, bool tlm);
+const char *dshot_txctl_set_bidir(dshot_txctl_t *t, bool bidir);
+uint32_t dshot_txctl_max_rate(const dshot_txctl_t *t);
 void dshot_txctl_set_enabled(dshot_txctl_t *t, bool enabled);
 void dshot_txctl_set_timeout(dshot_txctl_t *t, uint32_t timeout_ms);
 void dshot_txctl_stop(dshot_txctl_t *t);

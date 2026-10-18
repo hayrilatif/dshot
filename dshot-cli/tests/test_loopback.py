@@ -62,7 +62,7 @@ def test_cli_loopback_end_to_end(monkeypatch, capsys):
     fw = FakeFirmware()
     monkeypatch.setattr(cli, "Link", lambda port: Link(port, timeout=0.2, serial_obj=FakeSerial(fw)))
     monkeypatch.setattr(loopback.time, "sleep", lambda s: None)
-    assert cli.main(["loopback-test", "--port", "X", "--quick", "--speeds", "600"]) == 0
+    assert cli.main(["loopback-test", "--port", "X", "--quick", "--speeds", "600", "--yes"]) == 0
     assert "sıfır uyuşmazlık" in capsys.readouterr().out
 
 
@@ -70,3 +70,16 @@ def test_cli_reports_device_error(monkeypatch, capsys):
     monkeypatch.setattr(cli, "Link", lambda port: Link(port, timeout=0.2, serial_obj=FakeSerial(lambda l: "ERR busy\n")))
     assert cli.main(["tx", "speed", "300", "--port", "X"]) == 2
     assert "busy" in capsys.readouterr().err
+
+
+def test_loopback_requires_confirmation(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    opened = []
+    monkeypatch.setattr(cli, "Link", lambda port: opened.append(port))
+    monkeypatch.setattr("builtins.input", lambda prompt="": "")
+    assert cli.main(["loopback-test", "--port", "X"]) == 1
+    assert opened == []  # porta hiç dokunulmadı
+    assert "ESC/motor BAĞLI OLMAMALI" in capsys.readouterr().err
+    assert cli.confirm_loopback(SimpleNamespace(yes=False), ask=lambda p: "e")
+    assert not cli.confirm_loopback(SimpleNamespace(yes=False), ask=lambda p: "hayır")

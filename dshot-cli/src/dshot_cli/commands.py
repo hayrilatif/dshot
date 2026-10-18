@@ -8,12 +8,13 @@ SPECIAL_COMMANDS = {
     "3d_off": 9, "3d_on": 10,
     "settings_request": 11,
     "save": 12,
+    "edt_on": 13, "edt_off": 14,
     "spin_normal": 20, "spin_reversed": 21,
     "led0_on": 22, "led1_on": 23, "led2_on": 24, "led3_on": 25,
     "led0_off": 26, "led1_off": 27, "led2_off": 28, "led3_off": 29,
 }
 # ESC'lerin kabul etmesi için art arda birkaç kez gönderilmesi gerekenler
-REPEAT_REQUIRED = {7, 8, 9, 10, 12, 20, 21}
+REPEAT_REQUIRED = {7, 8, 9, 10, 12, 13, 14, 20, 21}
 
 
 def resolve(token: str) -> tuple:

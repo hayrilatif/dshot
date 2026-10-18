@@ -12,11 +12,13 @@ TICK_S = 0.1
 STATUS_EVERY = 5
 RX_STREAM_MS = 250
 RX_STALE_S = 1.5
+TELEM_MS = 250
+DEFAULT_POLES = 14
 
 HELP = [
     "↑/↓ throttle ±10   ←/→ ±1   PgUp/PgDn ±100   Boşluk/0: DUR",
-    "s: hız değiştir   t: telemetri biti   e: çıkış aç/kapa   b: bip",
-    ":  komut yaz (ör. cmd spin_reversed, rate 2000, raw 1046 1, timeout 0)",
+    "s: hız değiştir   d: bidirectional (telemetri) aç/kapa   t: telemetri biti   e: çıkış   b: bip",
+    ":  komut yaz (ör. cmd spin_reversed, cmd edt_on, rate 2000, raw 1046 1, poles 14)",
     "q: çık (çıkarken motor durdurulur)",
 ]
 
@@ -30,8 +32,13 @@ class Dashboard:
         self.rx_time = None
         self.message = "Hazır"
         self.input = None  # komut satırı modunda yazılan metin
+        self.telem = {}
+        self.telem_time = None
+        self.poles = DEFAULT_POLES
         self._ticks = 0
         self.refresh_status()
+        if self.tx:
+            self.tx.command(f"TX TELEM {TELEM_MS}")
         if self.rx:
             self.rx.command("RX POL AUTO")
             self.rx.command(f"RX STREAM {RX_STREAM_MS}")
@@ -73,7 +80,28 @@ class Dashboard:
             if stopped:
                 self.message += "  (hız değişimi için motor durduruldu)"
 
+    def toggle_bidir(self):
+        on = self.status.get("tx_bidir") == "1"
+        if self.throttle > 0:
+            self.stop()
+        if self._tx(f"TX BIDIR {0 if on else 1}"):
+            self.status["tx_bidir"] = "0" if on else "1"
+            self.telem, self.telem_time = {}, None
+            if not on:
+                self.message += "  (ESC bidirectional'ı görmezse gücünü kesip tekrar ver)"
+
     def run_command(self, text):
+        parts = text.split()
+        if parts and parts[0].lower() == "poles":
+            try:
+                poles = int(parts[1])
+                if poles < 2 or poles % 2:
+                    raise ValueError
+                self.poles = poles
+                self.message = f"Motor kutup sayısı: {poles}"
+            except (IndexError, ValueError):
+                self.message = "HATA: kullanım 'poles 14' (çift sayı)"
+            return
         try:
             cmd = shell_line_to_command(text)
         except DShotError as e:
@@ -104,12 +132,16 @@ class Dashboard:
         if line.startswith("#RX"):
             self.rx_stats = parse_kv(line[3:])
             self.rx_time = self.clock()
+        elif line.startswith("#T "):
+            self.telem = parse_kv(line[3:])
+            self.telem_time = self.clock()
         elif line.startswith("#TX FAILSAFE"):
             self.throttle = 0
             self.message = "FAILSAFE: bağlantı kesildi sanıldı, motor durduruldu"
 
     def close(self):
         for fn in (lambda: self.tx and self.tx.command("TX STOP"),
+                   lambda: self.tx and self.tx.command("TX TELEM 0"),
                    lambda: self.rx and self.rx.command("RX STREAM 0")):
             try:
                 fn()
@@ -138,6 +170,8 @@ class Dashboard:
             self.stop()
         elif key == ord("s") and self.tx:
             self.cycle_speed()
+        elif key == ord("d") and self.tx:
+            self.toggle_bidir()
         elif key == ord("t") and self.tx:
             on = self.status.get("tx_tlm") == "1"
             if self._tx(f"TX TLM {0 if on else 1}"):
@@ -164,12 +198,15 @@ class Dashboard:
             out += [
                 "── GÖNDERİM (PA8) " + "─" * 40,
                 f"  Hız: DShot{st.get('tx_speed', '?')}    Frame/sn: {st.get('tx_rate', '?')}    "
+                f"Bidirectional: {'AÇIK' if st.get('tx_bidir') == '1' else 'kapalı'}    "
                 f"Çıkış: {'AÇIK' if st.get('tx_en', '1') == '1' else 'KAPALI'}    "
                 f"Failsafe: {'kapalı' if timeout == '0' else timeout + ' ms'}",
                 f"  Gönderilen: {val:4}  → {value_meaning(val)}",
                 f"  Telemetri biti: {st.get('tx_tlm', '0')}",
                 "",
             ]
+        if self.tx and st.get("tx_bidir") == "1":
+            out += self.telemetry_lines() + [""]
         if self.rx:
             out.append("── OKUMA (PB6) " + "─" * 43)
             s = self.rx_stats
@@ -201,6 +238,41 @@ class Dashboard:
         out += ["  " + h for h in HELP]
         out.append("")
         out.append(f"  > {self.input}_" if self.input is not None else f"  {self.message}")
+        return out
+
+
+    def telemetry_lines(self) -> list:
+        out = ["── TELEMETRİ (bidirectional, PA8) " + "─" * 24]
+        t = self.telem
+        if self.telem_time is None or self.clock() - self.telem_time >= RX_STALE_S:
+            return out + ["  Telemetri verisi bekleniyor..."]
+        ok, bad, miss = (int(t.get(k, 0)) for k in ("ok", "bad", "miss"))
+        total = ok + bad + miss
+        if total == 0:
+            return out + ["  Frame gönderilmiyor (çıkış kapalı mı?)"]
+        out.append(f"  Cevap: %{ok * 100 // total} başarılı   (iyi {ok}, bozuk {bad}, cevapsız {miss})")
+        if ok == 0:
+            if miss == total:
+                out += ["  ESC cevap vermiyor. Kontrol et:",
+                        "   - ESC firmware'i bidirectional destekliyor mu? (Bluejay, AM32, BLHeli_32; düz BLHeli_S desteklemez)",
+                        "   - Bidirectional açıkken ESC'nin gücünü kesip tekrar ver (ESC modu açılışta algılar)"]
+            else:
+                out.append("  Cevaplar çözülemiyor (sinyal bozuk / hız uyumsuz?)")
+            return out
+        erpm = t.get("erpm", "-")
+        if erpm != "-":
+            rpm = int(erpm) // (self.poles // 2)
+            out.append(f"  Devir: {rpm} RPM   (eRPM {erpm}, {self.poles} kutup — değiştirmek için ':poles N')")
+        edt = []
+        if t.get("temp_c", "-") != "-":
+            edt.append(f"Sıcaklık: {t['temp_c']} °C")
+        if t.get("volt_mv", "-") != "-":
+            edt.append(f"Voltaj: {int(t['volt_mv']) / 1000:.2f} V")
+        if t.get("curr_a", "-") != "-":
+            edt.append(f"Akım: {t['curr_a']} A")
+        if t.get("stress", "-") != "-":
+            edt.append(f"Stres: {t['stress']}")
+        out.append("  " + "   ".join(edt) if edt else "  Sıcaklık/voltaj/akım yok (EDT kapalı olabilir: ':cmd edt_on')")
         return out
 
 

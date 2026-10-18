@@ -94,6 +94,10 @@ int main(void)
                 cdc_write_wait("ERR too long\n", 13, REPLY_WAIT_MS);
             }
         }
+        dshot_reply_t reply;
+        while (tx_hw_pop_reply(&reply)) {
+            app_tx_reply(&app, &reply, tx_hw_tick_hz());
+        }
 #if BOARD_HAS_RX
         dshot_rx_burst_t b;
         while (rx_hw_pop(&b)) {

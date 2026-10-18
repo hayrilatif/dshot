@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "dshot_rx_decode.h"
 #include "dshot_rx_stats.h"
+#include "dshot_telem.h"
 #include "dshot_txctl.h"
 
 #define APP_FW_VERSION         "1.0.0"
@@ -17,7 +18,7 @@ typedef struct {
     const char *board;
     bool has_tx;
     bool has_rx;
-    void (*tx_apply)(const dshot_txctl_t *tx);   /* hız / rate değişti */
+    void (*tx_apply)(const dshot_txctl_t *tx);   /* hız / rate / bidir değişti */
     void (*rx_set_inverted)(bool inverted);      /* yakalama polaritesi */
 } app_hw_t;
 
@@ -34,6 +35,9 @@ typedef struct {
     uint32_t last_stream_ms;
     uint32_t raw_every;
     uint32_t raw_count;
+    dshot_telem_t telem;
+    uint32_t telem_ms;
+    uint32_t last_telem_ms;
 } app_t;
 
 void app_init(app_t *a, const app_hw_t *hw, uint32_t dev_id, uint32_t now_ms);
@@ -41,6 +45,8 @@ void app_init(app_t *a, const app_hw_t *hw, uint32_t dev_id, uint32_t now_ms);
 size_t app_handle_line(app_t *a, char *line, uint32_t now_ms, char *out, size_t cap);
 /* Yakalanan bir burst'ü işler; RX RAW açıksa "#F ..." yazabilir. */
 size_t app_rx_burst(app_t *a, const dshot_rx_burst_t *b, uint32_t tick_hz, char *out, size_t cap);
+/* Bidirectional cevabı (her frame sonrası, cevap yoksa count=0) */
+void app_tx_reply(app_t *a, const dshot_reply_t *r, uint32_t tick_hz);
 /* Failsafe, ertelenmiş CMD cevabı ve periyodik "#RX" özeti. */
 size_t app_poll(app_t *a, uint32_t now_ms, bool dtr, char *out, size_t cap);
 /* Ertelenmiş cevap beklenirken yeni komut okunmaz */

@@ -31,3 +31,13 @@ uint32_t dshot_max_rate_hz(dshot_speed_t speed)
     }
     return 1000000000u / (18u * bit_ns + 20000u);
 }
+
+uint32_t dshot_max_rate_bidir_hz(dshot_speed_t speed)
+{
+    uint32_t bit_ns = dshot_bit_ns(speed);
+    if (bit_ns == 0u) {
+        return 0;
+    }
+    /* 18 bit frame + 40 µs ESC gecikmesi + 21 cevap biti (her biri 0.8 bit) + 20 µs pay */
+    return 1000000000u / (18u * bit_ns + 40000u + 21u * bit_ns * 4u / 5u + 20000u);
+}

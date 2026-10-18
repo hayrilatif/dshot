@@ -3,6 +3,7 @@
 #include "app.h"
 #include "burst_helper.h"
 #include "proto.h"
+#include "reply_helper.h"
 
 static int apply_count;
 static int inv_calls;
@@ -61,7 +62,7 @@ static void test_status_txrx(void)
 {
     cmd("STATUS", 0);
     TEST_ASSERT_EQUAL_STRING("OK board=blackpill caps=tx,rx dev=0x431 fw=1.0.0 tx_speed=600 tx_rate=1000 tx_val=0 "
-                             "tx_tlm=0 tx_en=1 tx_timeout=500 rx_pol=auto rx_inv=0 rx_stream=0\n",
+                             "tx_tlm=0 tx_en=1 tx_timeout=500 tx_bidir=0 tx_telem=0 rx_pol=auto rx_inv=0 rx_stream=0\n",
                              out);
 }
 
@@ -245,6 +246,25 @@ static void test_rx_raw_every_2(void)
     TEST_ASSERT_EQUAL_STRING("#F val=1046 tlm=0 crc=ok inv=0 raw=0x82C6 bit_ns=1667\n", out);
 }
 
+static void test_bidir_telemetry_stream(void)
+{
+    cmd("TX BIDIR 1", 0);
+    TEST_ASSERT_EQUAL_STRING("OK\n", out);
+    TEST_ASSERT_EQUAL(1, apply_count);
+    cmd("TX TELEM 100", 0);
+    dshot_reply_t r = make_reply(0x3F4, 112);
+    app_tx_reply(&app, &r, 84000000u);
+    r = make_reply(0x223, 112);
+    app_tx_reply(&app, &r, 84000000u);
+    r.count = 0;
+    app_tx_reply(&app, &r, 84000000u);
+    poll(100, true);
+    TEST_ASSERT_EQUAL_STRING("#T ok=2 bad=0 miss=1 erpm=60000 temp_c=35 volt_mv=- curr_a=- stress=- status=-\n", out);
+    cmd("TX THR 100", 100);
+    cmd("TX BIDIR 0", 100);
+    TEST_ASSERT_EQUAL_STRING("ERR busy\n", out);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -266,5 +286,6 @@ int main(void)
     RUN_TEST(test_rx_pol_fixed_ignores_idle);
     RUN_TEST(test_rx_raw_reports_bad_bursts);
     RUN_TEST(test_rx_raw_every_2);
+    RUN_TEST(test_bidir_telemetry_stream);
     return UNITY_END();
 }

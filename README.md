@@ -50,6 +50,7 @@ En kolayı — **kontrol paneli** (gönderim + canlı okuma tek ekranda):
 | ↑ / ↓ | throttle ±10 (←/→ ±1, PgUp/PgDn ±100) |
 | Boşluk veya 0 | DUR |
 | s | hız değiştir 150→300→600→1200 (motor önce durdurulur) |
+| d | bidirectional DShot (telemetri) aç/kapa (motor önce durdurulur) |
 | t / e / b | telemetri biti / çıkış aç-kapa / bip |
 | : | komut yaz (`cmd spin_reversed`, `rate 2000`, `raw 1046 1`, `timeout 0`...) |
 | q | çık (motor durdurulur) |
@@ -70,7 +71,18 @@ dshot rx monitor                # okuyucu özeti (hız, değer aralığı, CRC h
 dshot rx monitor --raw 100      # + her 100. frame ve tüm bozuk burst'ler
 dshot rx pol auto               # bidirectional (ters) DShot'ı otomatik algıla
 dshot loopback-test             # PA8→PB6 jumper'ıyla kabul testi (tüm hızlar, ~1 dk)
+                                # ⚠ 0..2047 TÜM değerleri gönderir: PA8'e ESC/motor BAĞLIYKEN ÇALIŞTIRMA
 ```
+
+### Bidirectional DShot (aynı kablodan telemetri)
+
+Panelde `d` veya `dshot tx bidir on`. Sinyal ters (boşta high) ve ters CRC'li gönderilir; her frame'den sonra PA8
+girişe geçip ESC'nin cevabını yakalar. Panel devir (RPM; kutup sayısı `:poles 14`) ve ESC destekliyorsa
+EDT ile sıcaklık / voltaj / akım gösterir (`:cmd edt_on` ile açılır).
+
+- ESC firmware'i desteklemeli: Bluejay, AM32, BLHeli_32 (düz BLHeli_S desteklemez).
+- ESC modu açılışta algılar: bidirectional açtıktan sonra ESC'nin gücünü kesip tekrar ver.
+- Motor dururken de cevap gelir (devir 0) — test için motoru döndürmek gerekmez.
 
 ### Güvenlik (failsafe)
 

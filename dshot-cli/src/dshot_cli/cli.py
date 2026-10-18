@@ -17,7 +17,7 @@ CHIPS = {
     "0x000": "okunamadı (F103'te debugger yokken normal)",
 }
 
-TX_WORDS = {"SPEED", "RATE", "THR", "RAW", "TLM", "CMD", "STOP", "ENABLE", "TIMEOUT"}
+TX_WORDS = {"SPEED", "RATE", "THR", "RAW", "TLM", "CMD", "STOP", "ENABLE", "TIMEOUT", "BIDIR", "TELEM"}
 RX_WORDS = {"STREAM", "POL", "RESET"}
 
 SHELL_HELP = """Komutlar (TX/RX öneki isteğe bağlı):
@@ -30,6 +30,7 @@ SHELL_HELP = """Komutlar (TX/RX öneki isteğe bağlı):
   stop                   değer 0
   enable 0|1             pals üretimi
   timeout <ms>           failsafe (0 = kapalı)
+  bidir 0|1              bidirectional DShot (ESC aynı kablodan telemetri yollar)
   stream <ms> / pol auto|normal|inverted / reset   (okuyucu)
   status                 durum
   quit                   çık (çıkarken TX STOP gönderilir)"""
@@ -189,6 +190,8 @@ def cmd_tx(args) -> int:
             link.command(f"TX ENABLE {int(args.state == 'on')}")
         elif a == "timeout":
             link.command(f"TX TIMEOUT {args.ms}")
+        elif a == "bidir":
+            link.command(f"TX BIDIR {int(args.state == 'on')}")
         print("OK")
     return 0
 
@@ -217,7 +220,28 @@ def cmd_rx(args) -> int:
     return 0
 
 
+LOOPBACK_WARNING = (
+    "UYARI: Bu test PA8'den 0..2047 arası TÜM değerleri (tam gaz dahil) gönderir.\n"
+    "PA8'e ESC/motor BAĞLI OLMAMALI; PA8↔PB6 jumper'ı (veya ayrı okuyucu kart) takılı olmalı."
+)
+
+
+def confirm_loopback(args, ask=None) -> bool:
+    if args.yes:
+        return True
+    ask = ask or input
+    print(LOOPBACK_WARNING, file=sys.stderr)
+    try:
+        answer = ask("ESC/motor bağlı değil, devam edilsin mi? [e/H] ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("e", "evet", "y", "yes")
+
+
 def cmd_loopback(args) -> int:
+    if not confirm_loopback(args):
+        print("İptal edildi.", file=sys.stderr)
+        return 1
     speeds = [int(s) for s in args.speeds.split(",")]
     for s in speeds:
         if s not in loopback.SPEEDS:
@@ -290,6 +314,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("state", choices=["on", "off"])
     s = txs.add_parser("timeout", parents=[port], help="failsafe ms (0 = kapalı)")
     s.add_argument("ms", type=int)
+    s = txs.add_parser("bidir", parents=[port], help="bidirectional DShot aç/kapa (değer 0 iken)")
+    s.add_argument("state", choices=["on", "off"])
     txs.add_parser("shell", parents=[port], help="interaktif kontrol")
 
     rx = sub.add_parser("rx", help="okuyucu")
@@ -308,6 +334,7 @@ def build_parser() -> argparse.ArgumentParser:
     lb.add_argument("--rx")
     lb.add_argument("--speeds", default="150,300,600,1200")
     lb.add_argument("--quick", action="store_true")
+    lb.add_argument("--yes", action="store_true", help="ESC bağlı olmadığı onayını atla")
     return p
 
 

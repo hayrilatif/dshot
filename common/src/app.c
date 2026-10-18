@@ -30,6 +30,8 @@ void app_init(app_t *a, const app_hw_t *hw, uint32_t dev_id, uint32_t now_ms)
     dshot_pol_init(&a->pol, false);
     dshot_stats_reset(&a->stats);
     a->last_stream_ms = now_ms;
+    dshot_telem_init(&a->telem);
+    a->last_telem_ms = now_ms;
 }
 
 bool app_busy(const app_t *a)
@@ -60,9 +62,10 @@ static size_t format_status(const app_t *a, char *out, size_t cap)
     size_t n = put(out, cap, "OK board=%s caps=%s dev=0x%03lx fw=%s", a->hw->board, caps, (unsigned long)a->dev_id,
                    APP_FW_VERSION);
     if (a->hw->has_tx) {
-        n += put(out + n, cap - n, " tx_speed=%u tx_rate=%lu tx_val=%u tx_tlm=%u tx_en=%u tx_timeout=%lu",
+        n += put(out + n, cap - n, " tx_speed=%u tx_rate=%lu tx_val=%u tx_tlm=%u tx_en=%u tx_timeout=%lu tx_bidir=%u tx_telem=%lu",
                  (unsigned)a->tx.speed, (unsigned long)a->tx.rate_hz, (unsigned)a->tx.value, (unsigned)a->tx.tlm,
-                 (unsigned)a->tx.enabled, (unsigned long)a->tx.timeout_ms);
+                 (unsigned)a->tx.enabled, (unsigned long)a->tx.timeout_ms, (unsigned)a->tx.bidir,
+                 (unsigned long)a->telem_ms);
     }
     if (a->hw->has_rx) {
         n += put(out + n, cap - n, " rx_pol=%s rx_inv=%u rx_stream=%lu", pol_name(a->rx_pol_mode),
@@ -147,6 +150,18 @@ size_t app_handle_line(app_t *a, char *line, uint32_t now_ms, char *out, size_t 
     case PROTO_TX_TIMEOUT:
         dshot_txctl_set_timeout(&a->tx, m.args[0]);
         break;
+    case PROTO_TX_BIDIR:
+        err = dshot_txctl_set_bidir(&a->tx, m.args[0] != 0u);
+        if (!err) {
+            dshot_telem_init(&a->telem);
+            tx_apply(a);
+        }
+        break;
+    case PROTO_TX_TELEM:
+        a->telem_ms = m.args[0];
+        a->last_telem_ms = now_ms;
+        dshot_telem_reset_window(&a->telem);
+        break;
     case PROTO_RX_STREAM:
         a->stream_ms = m.args[0];
         a->last_stream_ms = now_ms;
@@ -200,6 +215,13 @@ size_t app_rx_burst(app_t *a, const dshot_rx_burst_t *b, uint32_t tick_hz, char 
                (unsigned)r.raw, (unsigned long)r.bit_ns);
 }
 
+void app_tx_reply(app_t *a, const dshot_reply_t *r, uint32_t tick_hz)
+{
+    uint16_t v12 = 0;
+    dshot_reply_status_t st = dshot_reply_decode(r, tick_hz, a->tx.speed, &v12);
+    dshot_telem_add(&a->telem, st, v12);
+}
+
 size_t app_poll(app_t *a, uint32_t now_ms, bool dtr, char *out, size_t cap)
 {
     size_t n = 0;
@@ -219,6 +241,11 @@ size_t app_poll(app_t *a, uint32_t now_ms, bool dtr, char *out, size_t cap)
             a->cmd_reply_pending = false;
             n += put(out + n, cap - n, "%s", a->tx.cmd_aborted ? "ERR aborted\n" : "OK\n");
         }
+    }
+    if (a->hw->has_tx && a->telem_ms != 0u && (uint32_t)(now_ms - a->last_telem_ms) >= a->telem_ms) {
+        n += dshot_telem_format(&a->telem, out + n, cap - n);
+        dshot_telem_reset_window(&a->telem);
+        a->last_telem_ms = now_ms;
     }
     if (a->hw->has_rx && a->stream_ms != 0u && (uint32_t)(now_ms - a->last_stream_ms) >= a->stream_ms) {
         n += dshot_stats_format(&a->stats, now_ms - a->last_stream_ms, out + n, cap - n);

@@ -17,5 +17,7 @@ dshot_tx_timing_t dshot_tx_timing(uint32_t tim_hz, dshot_speed_t speed);
 void dshot_tx_fill(uint16_t frame, const dshot_tx_timing_t *t, uint16_t buf[DSHOT_TX_BUF_LEN]);
 /* periyot >= 18 bit + 20 µs olacak en yüksek frame hızı */
 uint32_t dshot_max_rate_hz(dshot_speed_t speed);
+/* Bidirectional: frame + ~30 µs ESC gecikmesi + 21 bitlik cevap + pay */
+uint32_t dshot_max_rate_bidir_hz(dshot_speed_t speed);
 
 #endif

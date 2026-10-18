@@ -124,6 +124,23 @@ static void test_dtr_drop(void)
     TEST_ASSERT_EQUAL_UINT16(0, t.value);
 }
 
+static void test_bidir_mode(void)
+{
+    uint16_t f;
+    TEST_ASSERT_NULL(dshot_txctl_set_bidir(&t, true));
+    dshot_txctl_next_frame(&t, &f);
+    TEST_ASSERT_EQUAL_HEX16(0x000F, f); /* ters CRC */
+    dshot_txctl_set_value(&t, 1046, false);
+    dshot_txctl_next_frame(&t, &f);
+    TEST_ASSERT_EQUAL_HEX16(0x82C9, f);
+    TEST_ASSERT_EQUAL_STRING("busy", dshot_txctl_set_bidir(&t, false));
+    dshot_txctl_stop(&t);
+    TEST_ASSERT_EQUAL_STRING("rate", dshot_txctl_set_rate(&t, 19000));
+    TEST_ASSERT_NULL(dshot_txctl_set_bidir(&t, false));
+    TEST_ASSERT_NULL(dshot_txctl_set_rate(&t, 19000));
+    TEST_ASSERT_EQUAL_STRING("rate", dshot_txctl_set_bidir(&t, true));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -139,5 +156,6 @@ int main(void)
     RUN_TEST(test_timeout_with_zero_output_reports_nothing);
     RUN_TEST(test_timeout_zero_disables_failsafe);
     RUN_TEST(test_dtr_drop);
+    RUN_TEST(test_bidir_mode);
     return UNITY_END();
 }

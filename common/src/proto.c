@@ -27,6 +27,8 @@ static const cmd_spec_t SPECS[] = {
     {"TX", "STOP", PROTO_TX_STOP, 0, 0, ARG_NUM, {0, 0}, {0, 0}},
     {"TX", "ENABLE", PROTO_TX_ENABLE, 1, 1, ARG_NUM, {0, 0}, {1, 0}},
     {"TX", "TIMEOUT", PROTO_TX_TIMEOUT, 1, 1, ARG_NUM, {0, 0}, {60000, 0}},
+    {"TX", "BIDIR", PROTO_TX_BIDIR, 1, 1, ARG_NUM, {0, 0}, {1, 0}},
+    {"TX", "TELEM", PROTO_TX_TELEM, 1, 1, ARG_NUM, {0, 0}, {10000, 0}},
     {"RX", "STREAM", PROTO_RX_STREAM, 1, 1, ARG_NUM, {0, 0}, {10000, 0}},
     {"RX", "RAW", PROTO_RX_RAW, 1, 1, ARG_NUM, {0, 0}, {100000, 0}},
     {"RX", "POL", PROTO_RX_POL, 1, 1, ARG_POL, {0, 0}, {0, 0}},
@@ -161,7 +163,7 @@ proto_msg_t proto_parse(char *line)
 
 bool proto_is_tx(proto_cmd_t c)
 {
-    return c >= PROTO_TX_SPEED && c <= PROTO_TX_TIMEOUT;
+    return c >= PROTO_TX_SPEED && c <= PROTO_TX_TELEM;
 }
 
 bool proto_is_rx(proto_cmd_t c)

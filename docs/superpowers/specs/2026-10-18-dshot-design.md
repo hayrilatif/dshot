@@ -119,8 +119,8 @@ yüksek empedanslıdır (dahili pull yok), hatta yük bindirmez.
   `OK` cevabı gönderim bitince verilir.
 - **Failsafe:** Son TX komutundan veya `PING`'den beri `TIMEOUT` ms geçerse
   (varsayılan 500) değer 0'a düşer ve kart `#TX FAILSAFE` satırı basar.
-  CDC DTR düşerse (port kapandı) failsafe hemen devreye girer. `TX TIMEOUT 0` failsafe'i kapatır
-  (yalnız tezgâh testi için).
+  CDC DTR düşerse (port kapandı) failsafe hemen devreye girer. `TX TIMEOUT 0` failsafe'i (hem zaman
+  aşımını hem DTR tetiğini) kapatır; yalnız tezgâh testi ve tek seferlik CLI komutları içindir.
 
 ## 6. Okuyucu (RX)
 
@@ -171,7 +171,7 @@ yüksek empedanslıdır (dahili pull yok), hatta yük bindirmez.
 | `TX SPEED 150|300|600|1200` | hız |
 | `TX RATE <hz>` | frame/sn |
 | `TX THR <0..2000>` | 0 → değer 0, n → değer n+47 |
-| `TX RAW <0..2047> [tlm]` | ham değer (test için); 1..47 yalnız değer 0 iken kabul edilir |
+| `TX RAW <0..2047> [tlm]` | ham değer (test için); 1..47, mevcut değer throttle (≥48) iken reddedilir (`ERR busy`) |
 | `TX TLM 0|1` | throttle frame'lerinde telemetri biti |
 | `TX CMD <1..47> [tekrar]` | özel komut (bkz. §5) |
 | `TX STOP` | değer 0 |

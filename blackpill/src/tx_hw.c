@@ -81,7 +81,11 @@ void TIM2_IRQHandler(void)
         return;
     }
     dshot_tx_fill(frame, &timing, dma_buf);
+    /* Önceki frame'den askıda kalan update DMA isteğini düşür; yoksa stream açılır açılmaz
+       iki transfer olup ilk bitin üstüne yazılabiliyor (frame 15 pals çıkıyor) */
+    TIM1->DIER = 0;
     DMA2->HIFCR = DMA_HIFCR_CTCIF5 | DMA_HIFCR_CHTIF5 | DMA_HIFCR_CTEIF5 | DMA_HIFCR_CDMEIF5 | DMA_HIFCR_CFEIF5;
     DMA2_Stream5->NDTR = DSHOT_TX_BUF_LEN;
     DMA2_Stream5->CR |= DMA_SxCR_EN;
+    TIM1->DIER = TIM_DIER_UDE;
 }

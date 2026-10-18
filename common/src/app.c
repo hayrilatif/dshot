@@ -184,7 +184,14 @@ size_t app_rx_burst(app_t *a, const dshot_rx_burst_t *b, uint32_t tick_hz, char 
     }
     dshot_burst_result_t r = dshot_decode_burst(b, tick_hz, a->pol.inverted);
     dshot_stats_add(&a->stats, &r, a->pol.inverted);
-    if (!r.is_frame || a->raw_every == 0u || ++a->raw_count < a->raw_every) {
+    if (a->raw_every == 0u) {
+        return 0;
+    }
+    if (!r.is_frame) {
+        /* 16 palslık olmayan burst'ler her zaman basılır (gürültü / ESC cevabı teşhisi) */
+        return put(out, cap, "#B n=%u idle=%u\n", (unsigned)b->n, (unsigned)b->idle_high);
+    }
+    if (++a->raw_count < a->raw_every) {
         return 0;
     }
     a->raw_count = 0;

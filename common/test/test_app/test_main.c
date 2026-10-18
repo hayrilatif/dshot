@@ -227,6 +227,16 @@ static void test_rx_pol_fixed_ignores_idle(void)
     TEST_ASSERT_EQUAL_UINT32(20, app.stats.n);
 }
 
+static void test_rx_raw_reports_bad_bursts(void)
+{
+    dshot_rx_burst_t b = make_burst(0x82C6, 140, false);
+    b.n = 15;
+    TEST_ASSERT_EQUAL(0, app_rx_burst(&app, &b, 84000000u, out, sizeof out));
+    cmd("RX RAW 100", 0);
+    app_rx_burst(&app, &b, 84000000u, out, sizeof out);
+    TEST_ASSERT_EQUAL_STRING("#B n=15 idle=0\n", out);
+}
+
 static void test_rx_raw_every_2(void)
 {
     cmd("RX RAW 2", 0);
@@ -254,6 +264,7 @@ int main(void)
     RUN_TEST(test_rx_other_counted);
     RUN_TEST(test_rx_pol_auto_flips);
     RUN_TEST(test_rx_pol_fixed_ignores_idle);
+    RUN_TEST(test_rx_raw_reports_bad_bursts);
     RUN_TEST(test_rx_raw_every_2);
     return UNITY_END();
 }

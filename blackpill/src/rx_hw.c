@@ -6,6 +6,8 @@
 
 #define CAP_LEN   256u /* 2'nin kuvveti */
 #define QUEUE_LEN 16u  /* 2'nin kuvveti */
+/* Reset modunda sayaç tetikleyici kenardan ~2 tick sonra sıfırlanır; yakalamalar bu kadar kısa çıkar */
+#define RESET_LATENCY_TICKS 2u
 
 static volatile uint16_t cap_period[CAP_LEN];
 static volatile uint16_t cap_high[CAP_LEN];
@@ -94,8 +96,8 @@ static void end_burst(void)
         b->idle_high = (GPIOB->IDR & GPIO_PIN_6) != 0u;
         if (b->n == DSHOT_BURST_PULSES) {
             for (unsigned i = 0; i < DSHOT_BURST_PULSES; i++) {
-                b->periods[i] = cap_period[(start_p + i) & mask];
-                b->highs[i] = cap_high[(start_h + i) & mask];
+                b->periods[i] = (uint16_t)(cap_period[(start_p + i) & mask] + RESET_LATENCY_TICKS);
+                b->highs[i] = (uint16_t)(cap_high[(start_h + i) & mask] + RESET_LATENCY_TICKS);
             }
         }
         __DMB();

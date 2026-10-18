@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dshot-cli"
+version = "1.0.0"
+description = "DShot gönderici/okuyucu kartları için komut satırı aracı"
+requires-python = ">=3.9"
+dependencies = ["pyserial>=3.5"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+dshot = "dshot_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

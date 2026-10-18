@@ -42,8 +42,36 @@ static void clock_init(void)
     }
 }
 
+#define DFU_MAGIC 0xDF00B007u
+#define SYSMEM_BASE 0x1FFF0000u
+
+void board_enter_dfu(void)
+{
+    __HAL_RCC_PWR_CLK_ENABLE();
+    HAL_PWR_EnableBkUpAccess();
+    RTC->BKP0R = DFU_MAGIC;
+    NVIC_SystemReset();
+}
+
+/* Reset sonrası, hiçbir çevre birimi kurulmadan çağrılmalı */
+static void dfu_check(void)
+{
+    __HAL_RCC_PWR_CLK_ENABLE();
+    if (RTC->BKP0R != DFU_MAGIC) {
+        return;
+    }
+    HAL_PWR_EnableBkUpAccess();
+    RTC->BKP0R = 0;
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
+    __HAL_SYSCFG_REMAPMEMORY_SYSTEMFLASH();
+    void (*boot)(void) = (void (*)(void))(*(volatile uint32_t *)(SYSMEM_BASE + 4u));
+    __set_MSP(*(volatile uint32_t *)SYSMEM_BASE);
+    boot();
+}
+
 void board_init(void)
 {
+    dfu_check();
     HAL_Init();
     __HAL_RCC_GPIOC_CLK_ENABLE();
     GPIO_InitTypeDef g = {0};

@@ -21,5 +21,7 @@ void board_led(bool on);
 uint32_t board_tim_apb1_hz(void);
 uint32_t board_tim_apb2_hz(void);
 void board_fatal(void);
+/* Reset atıp ST'nin USB DFU bootloader'ına girer (BOOT0'a basmadan yükleme) */
+void board_enter_dfu(void);
 
 #endif

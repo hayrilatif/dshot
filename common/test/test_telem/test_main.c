@@ -99,6 +99,38 @@ static void test_telem_aggregate_and_format(void)
     TEST_ASSERT_EQUAL_STRING("#T ok=0 bad=0 miss=0 erpm=- temp_c=35 volt_mv=16000 curr_a=3 stress=- status=-\n", out);
 }
 
+/* F103: düşen ve yükselen kenarlar ayrı tamponlarda yakalanır; birleşince aynı cevap çözülmeli */
+static void test_merge_split_edges(void)
+{
+    dshot_reply_t full = make_reply(0x5A3, 112);
+    uint16_t fall[DSHOT_REPLY_MAX_EDGES], rise[DSHOT_REPLY_MAX_EDGES];
+    unsigned nf = 0, nr = 0;
+    for (unsigned i = 0; i < full.count; i++) {
+        if (i % 2u == 0u) {
+            fall[nf++] = full.edges[i];
+        } else {
+            rise[nr++] = full.edges[i];
+        }
+    }
+    dshot_reply_t r;
+    dshot_reply_merge(&r, fall, nf, rise, nr);
+    TEST_ASSERT_EQUAL_UINT8(full.count, r.count);
+    TEST_ASSERT_EQUAL_UINT16_ARRAY(full.edges, r.edges, full.count);
+    uint16_t v12 = 0;
+    TEST_ASSERT_EQUAL(DSHOT_REPLY_OK, dshot_reply_decode(&r, 84000000u, DSHOT_600, &v12));
+    TEST_ASSERT_EQUAL_HEX16(0x5A3, v12);
+
+    /* toplam sığmazsa kesilir */
+    uint16_t many[DSHOT_REPLY_MAX_EDGES];
+    for (unsigned i = 0; i < DSHOT_REPLY_MAX_EDGES; i++) {
+        many[i] = (uint16_t)(i * 2u);
+    }
+    dshot_reply_merge(&r, many, DSHOT_REPLY_MAX_EDGES, many, 4);
+    TEST_ASSERT_EQUAL_UINT8(DSHOT_REPLY_MAX_EDGES, r.count);
+    dshot_reply_merge(&r, fall, 0, rise, 0);
+    TEST_ASSERT_EQUAL_UINT8(0, r.count);
+}
+
 static void test_bidir_rate_limits(void)
 {
     TEST_ASSERT_TRUE(dshot_max_rate_bidir_hz(DSHOT_600) < dshot_max_rate_hz(DSHOT_600));
@@ -116,5 +148,6 @@ int main(void)
     RUN_TEST(test_erpm_and_edt);
     RUN_TEST(test_telem_aggregate_and_format);
     RUN_TEST(test_bidir_rate_limits);
+    RUN_TEST(test_merge_split_edges);
     return UNITY_END();
 }

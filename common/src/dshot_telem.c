@@ -8,6 +8,19 @@ static const uint8_t GCR_DECODE[32] = {
     0xFF, 0xFF, 0x2,  0x3,  0xFF, 0x5,  0x6,  0x7,  0xFF, 0x0, 0x8, 0x1, 0xFF, 0x4, 0xC, 0xFF,
 };
 
+void dshot_reply_merge(dshot_reply_t *r, const uint16_t *a, unsigned na, const uint16_t *b, unsigned nb)
+{
+    unsigned i = 0, j = 0, n = 0;
+    while (n < DSHOT_REPLY_MAX_EDGES && (i < na || j < nb)) {
+        if (j >= nb || (i < na && a[i] <= b[j])) {
+            r->edges[n++] = a[i++];
+        } else {
+            r->edges[n++] = b[j++];
+        }
+    }
+    r->count = (uint8_t)n;
+}
+
 dshot_reply_status_t dshot_reply_decode(const dshot_reply_t *r, uint32_t tick_hz, dshot_speed_t speed, uint16_t *v12)
 {
     if (r->count == 0u) {

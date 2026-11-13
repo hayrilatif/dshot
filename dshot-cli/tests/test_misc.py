@@ -47,3 +47,21 @@ def test_discover_separate_boards_and_ambiguity():
     devs = discover.find_devices([port("/a", "DShot TXRX"), port("/b", "DShot TXRX")])
     with pytest.raises(DShotError, match="birden fazla"):
         discover.pick("tx", devs)
+
+
+def test_dfu_on_bluepill_prints_stlink_hint(monkeypatch, capsys):
+    from dshot_cli import cli
+    from dshot_cli.link import Link
+    from fakes import FakeSerial
+
+    sent = []
+
+    def fw(line):
+        sent.append(line)
+        return "OK board=bluepill caps=tx,rx dev=0x000 fw=1.0.0\n" if line == "STATUS" else "ERR unsupported\n"
+
+    link = Link("FAKE", timeout=0.2, serial_obj=FakeSerial(fw))
+    monkeypatch.setattr(cli, "_open", lambda args, cap: link)
+    assert cli.cmd_dfu(SimpleNamespace(port=None)) == 1
+    assert "DFU" not in sent
+    assert "ST-Link" in capsys.readouterr().out

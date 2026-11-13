@@ -9,6 +9,14 @@ void setUp(void)
 }
 void tearDown(void) {}
 
+static void test_trigger_taken_once(void)
+{
+    TEST_ASSERT_FALSE(dshot_txctl_take_trigger(&t));
+    dshot_txctl_mark_trigger(&t);
+    TEST_ASSERT_TRUE(dshot_txctl_take_trigger(&t));
+    TEST_ASSERT_FALSE(dshot_txctl_take_trigger(&t));
+}
+
 static void test_defaults(void)
 {
     TEST_ASSERT_EQUAL(DSHOT_600, t.speed);
@@ -157,5 +165,6 @@ int main(void)
     RUN_TEST(test_timeout_zero_disables_failsafe);
     RUN_TEST(test_dtr_drop);
     RUN_TEST(test_bidir_mode);
+    RUN_TEST(test_trigger_taken_once);
     return UNITY_END();
 }

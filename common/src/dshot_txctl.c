@@ -27,6 +27,7 @@ void dshot_txctl_init(dshot_txctl_t *t, uint32_t now_ms)
     t->cmd_remaining = 0;
     t->cmd_aborted = false;
     t->bidir = false;
+    t->trig_pending = false;
 }
 
 void dshot_txctl_touch(dshot_txctl_t *t, uint32_t now_ms)
@@ -175,4 +176,16 @@ bool dshot_txctl_next_frame(dshot_txctl_t *t, uint16_t *frame)
         *frame = dshot_encode(t->value, t->tlm, t->bidir);
     }
     return true;
+}
+
+void dshot_txctl_mark_trigger(dshot_txctl_t *t)
+{
+    t->trig_pending = true;
+}
+
+bool dshot_txctl_take_trigger(dshot_txctl_t *t)
+{
+    bool trig = t->trig_pending;
+    t->trig_pending = false;
+    return trig;
 }

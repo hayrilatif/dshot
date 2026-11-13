@@ -23,6 +23,7 @@ typedef struct {
     volatile uint16_t cmd_remaining;
     bool cmd_aborted;
     volatile bool bidir; /* ters sinyal + ters CRC, ESC aynı kablodan cevap verir */
+    volatile bool trig_pending; /* host'tan motor komutu geldi, tetik pini bekliyor */
 } dshot_txctl_t;
 
 void dshot_txctl_init(dshot_txctl_t *t, uint32_t now_ms);
@@ -44,6 +45,10 @@ bool dshot_txctl_tick(dshot_txctl_t *t, uint32_t now_ms);
 /* Port kapandı (DTR düştü); çıkışı değiştirdiyse true */
 bool dshot_txctl_dtr_drop(dshot_txctl_t *t);
 bool dshot_txctl_cmd_active(const dshot_txctl_t *t);
+/* Host'tan motor komutu geldi: bu komutu taşıyan ilk frame'de tetik pini palslanır */
+void dshot_txctl_mark_trigger(dshot_txctl_t *t);
+/* Frame kesmesinden, next_frame true döndükten sonra: bu frame tetiklenmeli mi (bir kez true) */
+bool dshot_txctl_take_trigger(dshot_txctl_t *t);
 /* Gönderilecek sıradaki frame; çıkış kapalıysa false */
 bool dshot_txctl_next_frame(dshot_txctl_t *t, uint16_t *frame);
 

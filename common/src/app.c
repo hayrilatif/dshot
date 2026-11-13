@@ -150,6 +150,7 @@ size_t app_handle_line(app_t *a, char *line, uint32_t now_ms, char *out, size_t 
         err = dshot_txctl_start_cmd(&a->tx, (uint16_t)m.args[0],
                                     (uint16_t)(m.nargs > 1u ? m.args[1] : APP_CMD_DEFAULT_REPEAT));
         if (!err) {
+            dshot_txctl_mark_trigger(&a->tx);
             a->cmd_reply_pending = true;
             return 0;
         }
@@ -238,6 +239,10 @@ size_t app_handle_line(app_t *a, char *line, uint32_t now_ms, char *out, size_t 
     default:
         err = "unknown";
         break;
+    }
+    if (!err && (m.cmd == PROTO_TX_THR || m.cmd == PROTO_TX_RAW || m.cmd == PROTO_TX_STOP ||
+                 m.cmd == PROTO_TX_RPM)) {
+        dshot_txctl_mark_trigger(&a->tx);
     }
     return err ? put(out, cap, "ERR %s\n", err) : put(out, cap, "OK\n");
 }

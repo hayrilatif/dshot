@@ -4,6 +4,7 @@
 #include "tx_hw.h"
 
 #define REPLY_QUEUE_LEN 8u /* 2'nin kuvveti */
+#define TRIG_PIN        GPIO_PIN_0 /* PB0 */
 
 static uint16_t dma_buf[DSHOT_TX_BUF_LEN];
 static dshot_tx_timing_t timing;
@@ -116,6 +117,13 @@ void tx_hw_init(dshot_txctl_t *c)
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
     HAL_GPIO_Init(GPIOA, &g);
 
+    /* Tetik çıkışı: host motor komutu veren ilk frame'in başında high, bir frame periyodu sürer */
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    g.Pin = TRIG_PIN;
+    HAL_GPIO_WritePin(GPIOB, TRIG_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_Init(GPIOB, &g);
+    g.Pin = GPIO_PIN_8;
+
     TIM1->CR1 = TIM_CR1_ARPE;
     TIM1->PSC = 0;
     TIM1->BDTR = TIM_BDTR_MOE;
@@ -155,6 +163,7 @@ void tx_hw_init(dshot_txctl_t *c)
 void TIM2_IRQHandler(void)
 {
     TIM2->SR = ~TIM_SR_UIF;
+    GPIOB->BSRR = (uint32_t)TRIG_PIN << 16u;
     if (capturing) {
         finish_capture();
     }
@@ -166,12 +175,16 @@ void TIM2_IRQHandler(void)
         return;
     }
     dshot_tx_fill(frame, &timing, dma_buf);
+    bool trig = dshot_txctl_take_trigger(ctl);
     /* Önceki frame'den askıda kalan update DMA isteğini düşür; yoksa stream açılır açılmaz
        iki transfer olup ilk bitin üstüne yazılabiliyor (frame 15 pals çıkıyor) */
     TIM1->DIER = 0;
     DMA2->HIFCR = DMA_HIFCR_CTCIF5 | DMA_HIFCR_CHTIF5 | DMA_HIFCR_CTEIF5 | DMA_HIFCR_CDMEIF5 | DMA_HIFCR_CFEIF5;
     DMA2_Stream5->NDTR = DSHOT_TX_BUF_LEN;
     DMA2_Stream5->CR = (DMA2_Stream5->CR & ~DMA_SxCR_TCIE) | (bidir ? DMA_SxCR_TCIE : 0u) | DMA_SxCR_EN;
+    if (trig) {
+        GPIOB->BSRR = TRIG_PIN;
+    }
     TIM1->DIER = TIM_DIER_UDE;
 }
 

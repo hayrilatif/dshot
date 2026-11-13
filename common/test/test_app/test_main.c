@@ -285,6 +285,38 @@ static void feed_erpm(uint32_t erpm, int frames)
     }
 }
 
+static void test_trigger_on_motor_commands_only(void)
+{
+    static const char *const motor[] = {"TX THR 100", "TX THR 100", "TX STOP", "TX RAW 1046", "TX THR 0"};
+    for (unsigned i = 0; i < sizeof motor / sizeof motor[0]; i++) {
+        cmd(motor[i], 0);
+        TEST_ASSERT_TRUE_MESSAGE(dshot_txctl_take_trigger(&app.tx), motor[i]);
+    }
+    cmd("TX CMD 1 1", 0);
+    TEST_ASSERT_TRUE(dshot_txctl_take_trigger(&app.tx));
+    uint16_t f;
+    dshot_txctl_next_frame(&app.tx, &f); /* tek komut frame'i gitti */
+    poll(0, true);
+    TEST_ASSERT_EQUAL_STRING("OK\n", out);
+    static const char *const other[] = {"PING", "STATUS", "TX TLM 1", "TX RATE 500", "TX THR 5000", "TX RPM 3000"};
+    for (unsigned i = 0; i < sizeof other / sizeof other[0]; i++) {
+        cmd(other[i], 0);
+        TEST_ASSERT_FALSE_MESSAGE(dshot_txctl_take_trigger(&app.tx), other[i]);
+    }
+    /* RPM hedefi bir host komutu (tetikler); kontrolcünün frame başına ayarları tetiklemez */
+    cmd("TX BIDIR 1", 0);
+    cmd("TX RPM 3000", 0);
+    TEST_ASSERT_TRUE(dshot_txctl_take_trigger(&app.tx));
+    feed_erpm(7000, 50);
+    TEST_ASSERT_FALSE(dshot_txctl_take_trigger(&app.tx));
+    /* failsafe host komutu değil */
+    cmd("TX THR 100", 0);
+    dshot_txctl_take_trigger(&app.tx);
+    poll(1000, true);
+    TEST_ASSERT_EQUAL_UINT16(0, app.tx.value);
+    TEST_ASSERT_FALSE(dshot_txctl_take_trigger(&app.tx));
+}
+
 static void test_rpm_mode_requires_bidir_and_runs(void)
 {
     cmd("TX RPM 3000", 0);
@@ -387,5 +419,6 @@ int main(void)
     RUN_TEST(test_rpm_lost_telemetry_stops);
     RUN_TEST(test_rpm_failsafe_stops_controller);
     RUN_TEST(test_rpm_settings);
+    RUN_TEST(test_trigger_on_motor_commands_only);
     return UNITY_END();
 }

@@ -88,7 +88,19 @@ Firmware projeleri `common/`'u `lib_extra_dirs` ile kullanır. Donanım katmanı
 | Blackpill | TX çıkış | PA8 | TIM1_CH1 (PWM) | DMA2 Stream5 Ch6 (TIM1_UP → CCR1) |
 | Blackpill | TX frame zamanlayıcı | — | TIM2 (update IRQ, RATE Hz) | — |
 | Blackpill (txrx) | RX giriş | PB6 (FT) | TIM4 CH1/CH2 PWM input | DMA1 Stream0 Ch2 (CH1), Stream3 Ch2 (CH2) |
+| Bluepill | TX çıkış | PA8 | TIM1_CH1 (PWM) | DMA1 Ch5 (TIM1_UP → CCR1) |
+| Bluepill | TX frame zamanlayıcı | — | TIM2 (update IRQ; 16 bit, 20 Hz altında 10 kHz taban) | — |
+| Bluepill | bidir cevap yakalama | PA8 | TIM1 IC1 düşen + IC2 (TI1) yükselen | DMA1 Ch2 (CH1), Ch3 (CH2) |
 | Bluepill | RX giriş | PB6 (FT) | TIM4 CH1/CH2 PWM input | DMA1 Ch1 (CH1), Ch4 (CH2) |
+| İkisi de | Tetik çıkışı | PB0 | GPIO (frame kesmesinde) | — |
+
+**Bluepill notları:** F103 timer'ları bir kanalda iki kenarı birden yakalayamaz; bidir cevabı iki kanalda
+toplanıp `dshot_reply_merge` ile birleştirilir. F103'te USB DFU bootloader olmadığından yükleme ST-Link ile
+yapılır, `DFU` komutu `ERR unsupported` döner.
+
+**Tetik (PB0):** host'tan motor komutu (`TX THR|RAW|STOP|CMD|RPM`) gelince `trig_pending` kurulur; frame
+kesmesi bu komutu taşıyan ilk frame'in DMA'sını başlatırken PB0'ı high yapar, bir sonraki frame kesmesinde
+low'a çeker.
 
 DMA eşlemeleri uygulama sırasında RM0368/RM0383 ve RM0008 DMA istek tablolarından
 doğrulanacaktır. PB6 her iki çipte 5 V toleranslıdır.

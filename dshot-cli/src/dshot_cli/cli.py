@@ -13,7 +13,7 @@ CHIPS = {
     "0x423": "STM32F401xB/C",
     "0x433": "STM32F401xD/E",
     "0x431": "STM32F411xC/E",
-    "0x410": "STM32F103 medium-density",
+    "0x410": "STM32F103 medium-density (Bluepill)",
     "0x000": "okunamadı (F103'te debugger yokken normal)",
 }
 
@@ -170,8 +170,15 @@ def cmd_status(args) -> int:
     return 0
 
 
+BLUEPILL_UPLOAD = ("Bluepill (STM32F103) USB DFU desteklemez; ST-Link ile yükle "
+                   "(SWDIO, SWCLK, GND, 3.3V): cd bluepill && pio run -e txrx -t upload")
+
+
 def cmd_dfu(args) -> int:
     with _open(args, None) as link:
+        if parse_kv(link.command("STATUS")).get("board") == "bluepill":
+            print(BLUEPILL_UPLOAD)
+            return 1
         link.command("DFU")
     print("Kart DFU moduna geçti. Yüklemek için: cd blackpill && pio run -e txrx -t upload")
     return 0

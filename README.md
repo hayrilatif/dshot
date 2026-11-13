@@ -5,20 +5,37 @@ ESC'lere saf DShot (150/300/600/1200) göndermek, DShot hatlarını okuyup çöz
 | Klasör | İçerik |
 |---|---|
 | `blackpill/` | STM32F401CC / F411CE firmware'i (PlatformIO + STM32Cube HAL). `env:txrx` gönderici + okuyucu, `env:tx` sadece gönderici |
+| `bluepill/` | STM32F103C8 firmware'i — Blackpill'in aynısı. `env:txrx`, `env:tx`, `env:rx` (sadece okuyucu) |
 | `common/` | Donanımdan bağımsız C kodu: frame, zamanlama, okuyucu çözücü, protokol, failsafe (+ native testler) |
 | `dshot-cli/` | Python komut satırı aracı `dshot` |
 | `test-vectors.json` | C ve Python testlerinin ortak frame vektörleri |
 
-Bluepill okuyucu henüz yok; tasarım `docs/superpowers/specs/` altında.
-
 ## Bağlantı
+
+İki kartta da pinler aynı:
 
 | Pin | İş |
 |---|---|
 | **PA8** | DShot çıkışı → ESC sinyal girişi (TIM1_CH1) |
 | **PB6** | DShot girişi (TIM4, 5 V toleranslı, yüksek empedans) |
+| **PB0** | Tetik çıkışı (osiloskop / lojik analizör için, aşağıya bak) |
 | GND | ESC / ölçülen hat ile **ortak GND şart** |
 | PC13 | LED (yanıp sönüyorsa firmware çalışıyor) |
+
+### Tetik çıkışı (PB0)
+
+Host'tan her **motor komutu** geldiğinde (`TX THR`, `TX RAW`, `TX STOP`, `TX CMD`, `TX RPM` — panelde ok tuşları,
+Boşluk, bip, RPM hedefi) PB0, o komutu taşıyan **ilk DShot frame'i başlarken** high olur ve bir frame periyodu
+(1000 Hz'de 1 ms) high kalır. PA8'deki frame'in ilk biti yükselen kenardan **1–2 bit süresi + kesme gecikmesi**
+sonra başlar (DShot600'de ~1.7–3.5 µs, DShot150'de ~13 µs'ye kadar; CCR1 preload yüzünden).
+
+- Osiloskopu PB0'ın yükselen kenarında tetikle, ESC'nin motor fazını diğer kanalda izle → komut ile ESC tepkisi
+  arasındaki gecikme ekranda okunur.
+- Mikrosaniye hassasiyeti gerekiyorsa PA8'i de bir kanala al: ESC komutu 16. bit bitince alır, asıl sıfır noktası
+  frame'in sonudur.
+- RPM kontrolcüsünün her frame'deki küçük ayarları ve failsafe tetiklemez; yalnız host'tan gelen komutlar.
+  `TX RPM`'de tetik komutun geldiği anı gösterir; kontrolcü değeri bir sonraki telemetri cevabından sonra değiştirir.
+- Komut aynı değeri tekrar gönderse de (ör. `TX THR 100` iki kez) tetikler.
 
 Kendi kendine test için PA8 ↔ PB6 arasına jumper tak.
 
@@ -30,12 +47,20 @@ python3 -m venv .venv && .venv/bin/pip install -e "dshot-cli[test]"
 
 ## Firmware yükleme
 
-İlk sefer: BOOT0 basılıyken NRST'ye bas → DFU modu. Sonrakilerde tuşa gerek yok:
+**Blackpill** — ilk sefer: BOOT0 basılıyken NRST'ye bas → DFU modu. Sonrakilerde tuşa gerek yok:
 
 ```bash
 .venv/bin/dshot dfu                        # kartı DFU'ya al
 cd blackpill && pio run -e txrx -t upload   # veya -e tx
 ```
+
+**Bluepill** — F103'te USB DFU yok; ST-Link ile (SWDIO, SWCLK, GND, 3.3V):
+
+```bash
+cd bluepill && pio run -e txrx -t upload    # veya -e tx / -e rx
+```
+
+Bluepill'de `dev` STATUS'ta `0x000` görünebilir (F103, debugger bağlı değilken IDCODE'u okuyamaz; normal).
 
 ## Kullanım
 
@@ -112,6 +137,7 @@ Ayrıntı: `docs/superpowers/specs/2026-10-18-dshot-design.md` §7.
 
 ```bash
 cd common && pio test -e native        # C
+cd bluepill && pio run                 # Bluepill derlemesi (txrx)
 cd dshot-cli && ../.venv/bin/pytest -q # Python
 dshot loopback-test                    # donanım (PA8↔PB6)
 ```
@@ -120,4 +146,5 @@ dshot loopback-test                    # donanım (PA8↔PB6)
 
 - `dshot ports` boş: `ls /dev/ttyACM*`; kullanıcı `dialout` grubunda olmalı.
 - DFU bulunamıyor: `dfu-util -l`; gerekirse BOOT0+NRST ile elle gir.
+- Bluepill USB'de görünmüyor: R10 (D+ pull-up) 1.5 kΩ olmalı; bazı kartlarda 10 kΩ takılı gelir.
 - Okuyucu `other` sayıyor: hat bağlı değil/gürültülü ya da bidirectional ESC cevapları (`rx pol auto`).

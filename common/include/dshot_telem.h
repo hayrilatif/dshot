@@ -23,6 +23,10 @@ typedef enum {
     DSHOT_REPLY_BAD_CRC,
 } dshot_reply_status_t;
 
+/* İki ayrı kenar dizisini (ör. düşen / yükselen, her biri zamanla artan) tek sıralı diziye birleştirir;
+   DSHOT_REPLY_MAX_EDGES'i aşan kısım atılır. Her iki kenarı birden yakalayamayan timer'lar için (F103). */
+void dshot_reply_merge(dshot_reply_t *r, const uint16_t *a, unsigned na, const uint16_t *b, unsigned nb);
+
 dshot_reply_status_t dshot_reply_decode(const dshot_reply_t *r, uint32_t tick_hz, dshot_speed_t speed, uint16_t *v12);
 
 /* EDT (extended telemetry) çerçevesi mi: mantis MSB 0 ve üs != 0 */
